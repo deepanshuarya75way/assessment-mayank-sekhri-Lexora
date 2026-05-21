@@ -12,6 +12,7 @@ BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 CHECK_ONLY=false
 NO_INSTALL=false
+COMPILED=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -23,9 +24,13 @@ while [[ $# -gt 0 ]]; do
       NO_INSTALL=true
       shift
       ;;
+    --compiled)
+      COMPILED=true
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: ./start-dev.sh [--check-only] [--no-install]"
+      echo "Usage: ./start-dev.sh [--check-only] [--no-install] [--compiled]"
       exit 1
       ;;
   esac
@@ -115,11 +120,15 @@ ensure_backend_deps() {
 ensure_frontend_deps() {
   if [[ "$NO_INSTALL" == true ]]; then
     info "Skipping frontend dependency installation (--no-install)"
-    return
+  else
+    info "Installing frontend dependencies"
+    (cd "$FRONTEND_DIR" && npm install >/dev/null)
   fi
 
-  info "Installing frontend dependencies"
-  (cd "$FRONTEND_DIR" && npm install >/dev/null)
+  if [[ "$COMPILED" == true ]]; then
+    info "Compiling frontend for production build..."
+    (cd "$FRONTEND_DIR" && npm run build)
+  fi
 }
 
 start_backend() {
@@ -132,11 +141,19 @@ start_backend() {
 }
 
 start_frontend() {
-  info "Starting frontend on port $FRONTEND_PORT"
-  (
-    cd "$FRONTEND_DIR"
-    npm run dev -- --port "$FRONTEND_PORT" >"$FRONTEND_LOG" 2>&1
-  ) &
+  if [[ "$COMPILED" == true ]]; then
+    info "Starting compiled production frontend on port $FRONTEND_PORT"
+    (
+      cd "$FRONTEND_DIR"
+      npm run start -- --port "$FRONTEND_PORT" >"$FRONTEND_LOG" 2>&1
+    ) &
+  else
+    info "Starting frontend on port $FRONTEND_PORT"
+    (
+      cd "$FRONTEND_DIR"
+      npm run dev -- --port "$FRONTEND_PORT" >"$FRONTEND_LOG" 2>&1
+    ) &
+  fi
   FRONTEND_PID=$!
 }
 

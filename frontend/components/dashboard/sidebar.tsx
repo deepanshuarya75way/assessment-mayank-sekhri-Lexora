@@ -8,6 +8,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   const isHome = pathname === "/dashboard";
+  const isUpload = pathname === "/dashboard/upload";
   const isDocumentChat = pathname.startsWith("/dashboard/documents");
 
   return (
@@ -36,10 +37,14 @@ export function Sidebar() {
         </Link>
         
         <Link
-          href="/dashboard"
-          className="flex items-center gap-3 rounded-xl border border-transparent px-4 py-3 font-medium text-slate-400 transition hover:border-white/10 hover:bg-white/5 hover:text-white"
+          href="/dashboard/upload"
+          className={`flex items-center gap-3 rounded-xl border px-4 py-3 font-medium transition ${
+            isUpload 
+            ? "border-indigo-500/50 bg-indigo-500/10 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.2)]" 
+            : "border-transparent bg-transparent text-slate-400 hover:border-white/10 hover:bg-white/5 hover:text-white"
+          }`}
         >
-          <UploadCloud className="h-4 w-4" />
+          <UploadCloud className={`h-4 w-4 ${isUpload ? "text-indigo-400" : ""}`} />
           Upload + Index
         </Link>
 

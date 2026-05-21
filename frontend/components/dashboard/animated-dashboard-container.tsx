@@ -19,7 +19,7 @@ const itemVariants = {
 interface Props {
   header: ReactNode;
   kpis: ReactNode[];
-  upload: ReactNode;
+  upload?: ReactNode;
   list: ReactNode;
 }
 
@@ -43,9 +43,11 @@ export function AnimatedDashboardContainer({ header, kpis, upload, list }: Props
         ))}
       </motion.div>
 
-      <motion.div variants={itemVariants}>
-        {upload}
-      </motion.div>
+      {upload && (
+        <motion.div id="upload-section" variants={itemVariants} className="scroll-mt-6">
+          {upload}
+        </motion.div>
+      )}
 
       <motion.div variants={itemVariants}>
         {list}

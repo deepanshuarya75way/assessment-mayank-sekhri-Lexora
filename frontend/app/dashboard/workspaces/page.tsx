@@ -6,19 +6,15 @@ import { CreateWorkspaceForm } from "./create-workspace-form";
 
 export default async function WorkspacesPage() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const [userResult, workspacesResult] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("workspaces")
+      .select("id, name, created_at")
+      .order("created_at", { ascending: false })
+  ]);
 
-  let workspaces = [];
-  if (user) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/workspaces/${user.id}`, { cache: "no-store" });
-      if (res.ok) {
-        workspaces = await res.json();
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
+  const user = userResult.data.user;
+  const workspaces = workspacesResult.data || [];
 
   return (
     <div className="flex-1 overflow-y-auto bg-black p-6 sm:p-10">
@@ -48,7 +44,7 @@ export default async function WorkspacesPage() {
           {workspaces.length === 0 && (
              <div className="col-span-full py-12 text-center border border-dashed border-white/10 rounded-2xl">
                <Briefcase className="h-10 w-10 text-slate-600 mx-auto mb-4" />
-               <p className="text-slate-400">You haven't created any workspaces yet.</p>
+               <p className="text-slate-400">You haven&apos;t created any workspaces yet.</p>
              </div>
           )}
         </div>

@@ -478,7 +478,7 @@ export function DocumentChatPanel({
                                 REL {(source.score * 100).toFixed(1)}%
                               </span>
                             </div>
-                            <p className="text-xs leading-relaxed text-slate-400 line-clamp-3">"{source.chunk_text}"</p>
+                            <p className="text-xs leading-relaxed text-slate-400 line-clamp-3">&quot;{source.chunk_text}&quot;</p>
                           </div>
                         ))}
                       </div>
@@ -497,7 +497,7 @@ export function DocumentChatPanel({
                 </div>
                 <p className="text-lg font-semibold text-white">AI Ready to Assist</p>
                 <p className="mt-2 text-sm text-slate-400 max-w-sm">
-                  I've read the context and its vectors are loaded. Ask me to extract obligations, summarize dates, or find hidden clauses.
+                  I&apos;ve read the context and its vectors are loaded. Ask me to extract obligations, summarize dates, or find hidden clauses.
                 </p>
               </motion.div>
             )}
