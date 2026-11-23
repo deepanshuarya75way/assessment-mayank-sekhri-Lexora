@@ -1,4 +1,14 @@
+from typing import Literal
 from pydantic import BaseModel, Field
+
+IngestionStep = Literal[
+    "uploading",
+    "chunking",
+    "indexing",
+    "completed",
+    "failed",
+    "cancelled",
+]
 
 
 class DocumentIngestRequest(BaseModel):
@@ -11,9 +21,37 @@ class DocumentIngestRequest(BaseModel):
 
 class DocumentIngestResponse(BaseModel):
     document_id: str
-    chunks_indexed: int
-    page_count: int
+    chunks_indexed: int = 0
+    page_count: int = 0
     status: str
+    ingestion_step: IngestionStep = "uploading"
+    ingestion_progress: int = Field(default=0, ge=0, le=100)
+    step_message: str | None = None
+
+
+class DocumentStatusResponse(BaseModel):
+    document_id: str
+    title: str | None = None
+    status: str
+    ingestion_step: IngestionStep
+    ingestion_progress: int = Field(default=0, ge=0, le=100)
+    step_message: str | None = None
+    chunks_indexed: int = 0
+    page_count: int = 0
+    is_deleting: bool = False
+    error_message: str | None = None
+
+
+class DocumentDeleteRequest(BaseModel):
+    user_id: str = Field(min_length=1)
+
+
+class DocumentDeleteResponse(BaseModel):
+    document_id: str
+    deleted: bool
+    cancelled_in_flight: bool = False
+    previous_step: IngestionStep | None = None
+    status: str = "deleted"
 
 
 class ChatAskRequest(BaseModel):
@@ -73,7 +111,7 @@ class WorkspaceAddDocumentRequest(BaseModel):
     user_id: str = Field(min_length=1)
     document_id: str = Field(min_length=1)
 
+
 class WorkspaceRenameRequest(BaseModel):
     user_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
-

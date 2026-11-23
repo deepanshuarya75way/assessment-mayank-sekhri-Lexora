@@ -2,24 +2,38 @@ import { FileText, Sparkles, UploadCloud, FileSearch, Activity, Gauge } from "lu
 import { createClient } from "@/lib/supabase/server";
 import { AnimatedDashboardContainer } from "@/components/dashboard/animated-dashboard-container";
 import { AnimatedDocumentList } from "@/components/dashboard/animated-document-list";
+import { IN_FLIGHT_STEPS, type IngestionStep } from "@/lib/api";
 import Link from "next/link";
 
 export default async function DashboardPage() {
   const supabase = createClient();
   const [userResult, docsResult] = await Promise.all([
     supabase.auth.getUser(),
-    supabase.from("documents")
-      .select("id,title,status,created_at")
+    supabase
+      .from("documents")
+      .select(
+        "id,title,status,ingestion_step,ingestion_progress,step_message,is_deleting,chunks_indexed,page_count,error_message,created_at"
+      )
+      .eq("is_deleting", false)
+      .neq("ingestion_step", "cancelled")
       .order("created_at", { ascending: false })
-      .limit(20)
+      .limit(20),
   ]);
 
   const user = userResult.data.user;
-  const documents = docsResult.data;
+  const documents = docsResult.data ?? [];
 
-  const totalDocuments = documents?.length ?? 0;
-  const completedDocuments = documents?.filter((document) => document.status === "completed").length ?? 0;
-  const processingDocuments = documents?.filter((document) => document.status === "processing").length ?? 0;
+  const totalDocuments = documents.length;
+  const completedDocuments = documents.filter(
+    (doc) =>
+      doc.status === "completed" || doc.ingestion_step === "completed"
+  ).length;
+  const processingDocuments = documents.filter(
+    (doc) =>
+      doc.status === "processing" ||
+      (doc.ingestion_step != null &&
+        IN_FLIGHT_STEPS.has(doc.ingestion_step as IngestionStep))
+  ).length;
 
   const header = (
     <div className="relative overflow-hidden rounded-3xl border border-white/10 glass-panel p-7 sm:p-9 shadow-2xl">
@@ -80,7 +94,7 @@ export default async function DashboardPage() {
   const listAndPanel = (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2">
-        <AnimatedDocumentList initialDocuments={documents || []} />
+        <AnimatedDocumentList initialDocuments={documents} />
       </div>
       
       <div className="space-y-6">

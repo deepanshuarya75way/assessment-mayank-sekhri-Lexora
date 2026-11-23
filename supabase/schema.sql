@@ -1,4 +1,4 @@
--- Lexora Phase 1 schema with strict RLS
+-- Lexora Phase 1 & 2 schema with strict RLS (Fully Idempotent)
 -- Run this in the Supabase SQL editor for your project.
 
 create extension if not exists "pgcrypto";
@@ -18,7 +18,17 @@ create table if not exists public.documents (
   file_path text not null,
   file_size bigint,
   mime_type text,
-  status text not null default 'uploaded' check (status in ('uploaded', 'processing', 'completed', 'failed')),
+  status text not null default 'uploaded'
+    check (status in ('uploaded', 'processing', 'completed', 'failed', 'cancelled', 'deleting')),
+  ingestion_step text not null default 'uploading'
+    check (ingestion_step in ('uploading', 'chunking', 'indexing', 'completed', 'failed', 'cancelled')),
+  ingestion_progress integer not null default 0
+    check (ingestion_progress >= 0 and ingestion_progress <= 100),
+  step_message text,
+  chunks_indexed integer not null default 0,
+  page_count integer not null default 0,
+  is_deleting boolean not null default false,
+  error_message text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -282,6 +292,53 @@ alter table public.documents add column if not exists entities jsonb;
 alter table public.workspaces add column if not exists summary text;
 alter table public.workspaces add column if not exists entities jsonb;
 
+-- Ingestion step progress & pre-emptive deletion columns (idempotent migration)
+alter table public.documents add column if not exists ingestion_step text not null default 'uploading';
+alter table public.documents add column if not exists ingestion_progress integer not null default 0;
+alter table public.documents add column if not exists step_message text;
+alter table public.documents add column if not exists chunks_indexed integer not null default 0;
+alter table public.documents add column if not exists page_count integer not null default 0;
+alter table public.documents add column if not exists is_deleting boolean not null default false;
+alter table public.documents add column if not exists error_message text;
+
+-- Update status & ingestion_step constraints safely on existing tables
+do $$
+declare
+  c record;
+begin
+  for c in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    where nsp.nspname = 'public'
+      and rel.relname = 'documents'
+      and con.contype = 'c'
+      and (
+        pg_get_constraintdef(con.oid) ilike '%status%'
+        or pg_get_constraintdef(con.oid) ilike '%ingestion_step%'
+        or pg_get_constraintdef(con.oid) ilike '%ingestion_progress%'
+      )
+  loop
+    execute format('alter table public.documents drop constraint if exists %I', c.conname);
+  end loop;
+end $$;
+
+alter table public.documents
+  add constraint documents_status_check
+  check (status in ('uploaded', 'processing', 'completed', 'failed', 'cancelled', 'deleting'));
+
+alter table public.documents
+  add constraint documents_ingestion_step_check
+  check (ingestion_step in ('uploading', 'chunking', 'indexing', 'completed', 'failed', 'cancelled'));
+
+alter table public.documents
+  add constraint documents_ingestion_progress_check
+  check (ingestion_progress >= 0 and ingestion_progress <= 100);
+
+create index if not exists idx_documents_user_step
+  on public.documents (user_id, ingestion_step);
+
 -- Chat Sessions (Threads)
 create table if not exists public.chat_sessions (
   id uuid primary key default gen_random_uuid(),
@@ -295,8 +352,10 @@ create table if not exists public.chat_sessions (
 
 alter table public.chat_sessions enable row level security;
 
+drop policy if exists "Users can access their own chat sessions" on public.chat_sessions;
 create policy "Users can access their own chat sessions" on public.chat_sessions
-  for all using (auth.uid() = user_id);
+  for all using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 -- Link messages to sessions
 alter table public.chat_messages add column if not exists session_id uuid references public.chat_sessions (id) on delete cascade;
@@ -324,5 +383,16 @@ set session_id = s.id
 from public.chat_sessions s
 where m.workspace_id = s.workspace_id and m.user_id = s.user_id and m.session_id is null;
 
+-- Backfill existing completed/failed documents
+update public.documents
+set ingestion_step = 'completed',
+    ingestion_progress = 100,
+    step_message = coalesce(step_message, 'Ingestion complete')
+where status = 'completed'
+  and (ingestion_step is null or ingestion_step <> 'completed');
 
-
+update public.documents
+set ingestion_step = 'failed',
+    step_message = coalesce(step_message, 'Ingestion failed')
+where status = 'failed'
+  and (ingestion_step is null or ingestion_step <> 'failed');
